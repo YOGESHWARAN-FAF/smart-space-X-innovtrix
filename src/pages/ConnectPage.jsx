@@ -1,16 +1,24 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSmartSpace } from '../context/SmartSpaceContext';
-import { checkConnection } from '../utils/api';
-import { Save, Wifi } from 'lucide-react';
+import { Wifi, Save, Server } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const ConnectPage = () => {
-  const { espConfig, setEspConfig, addToast } = useSmartSpace();
-  const [ip, setIp] = useState('');
-  const [port, setPort] = useState('');
+  const navigate = useNavigate();
+  const { espConfig, setEspConfig, addToast, setIsConnected, safeFetch } = useSmartSpace();
+  const [ip, setIp] = useState(espConfig.ip || '');
+  const [port, setPort] = useState(espConfig.port || '80');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const navigate = useNavigate();
+
+  useEffect(() => {
+    const savedIp = localStorage.getItem('lastIp');
+    const savedPort = localStorage.getItem('lastPort');
+    if (savedIp) setIp(savedIp);
+    if (savedPort) setPort(savedPort);
+  }, []);
 
   useEffect(() => {
     if (espConfig.ip) setIp(espConfig.ip);
@@ -26,17 +34,20 @@ const ConnectPage = () => {
     setLoading(true);
     setStatusMessage('Checking connection...');
 
-    try {
-      // The checkConnection function in api.js now handles sanitization
-      await checkConnection(ip, port);
+    const cleanIP = ip.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const cleanPort = port.toString().replace(/[^0-9]/g, '');
+    const url = `http://${cleanIP}:${cleanPort}/ping`;
 
+    const res = await safeFetch(url);
+
+    if (res === 'pong' || (res && res.message === 'pong')) {
       // Success
       addToast('Connection successful!', 'success');
       setStatusMessage('Connected! ✔');
+      setIsConnected(true);
 
-      // Sanitize for storage too, to keep it clean
-      const cleanIP = ip.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const cleanPort = port.toString().replace(/[^0-9]/g, '');
+      localStorage.setItem('lastIp', ip);
+      localStorage.setItem('lastPort', port);
 
       setEspConfig({
         ...espConfig,
@@ -45,15 +56,11 @@ const ConnectPage = () => {
         isOnline: true,
         lastCheckedAt: new Date().toISOString()
       });
-
-    } catch (error) {
-      console.error(error);
-      addToast(`Connection failed: ${error.message}`, 'error');
-      setStatusMessage(`Error: ${error.message}`);
-      setEspConfig({ ...espConfig, isOnline: false });
-    } finally {
-      setLoading(false);
+    } else {
+      setStatusMessage('Connection failed');
+      setIsConnected(false);
     }
+    setLoading(false);
   };
 
   const handleSave = () => {
@@ -106,18 +113,23 @@ const ConnectPage = () => {
           )}
 
           <div className="button-group">
-            <button
+            <motion.button
+              whileTap={{ scale: 0.95 }}
               className="btn btn-secondary"
               onClick={handleConnect}
               disabled={loading}
             >
               <Wifi size={18} />
               {loading ? 'Checking...' : 'Check Connection'}
-            </button>
-            <button className="btn btn-primary" onClick={handleSave}>
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              className="btn btn-primary"
+              onClick={handleSave}
+            >
               <Save size={18} />
               Save & Continue
-            </button>
+            </motion.button>
           </div>
         </div>
 

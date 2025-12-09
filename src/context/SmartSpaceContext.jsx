@@ -19,6 +19,7 @@ const ACTIONS = {
   SET_ESP_CONFIG: 'SET_ESP_CONFIG',
   ADD_TOAST: 'ADD_TOAST',
   REMOVE_TOAST: 'REMOVE_TOAST',
+  SET_IS_CONNECTED: 'SET_IS_CONNECTED', // Added SET_IS_CONNECTED action
 };
 
 function reducer(state, action) {
@@ -80,11 +81,11 @@ function reducer(state, action) {
         venues: state.venues.map((v) =>
           v.id === venueId
             ? {
-                ...v,
-                devices: v.devices.map((d) =>
-                  d.id === deviceId ? { ...d, ...updates } : d
-                ),
-              }
+              ...v,
+              devices: v.devices.map((d) =>
+                d.id === deviceId ? { ...d, ...updates } : d
+              ),
+            }
             : v
         ),
       };
@@ -110,6 +111,12 @@ function reducer(state, action) {
       return {
         ...state,
         toasts: state.toasts.filter((t) => t.id !== action.payload),
+      };
+
+    case ACTIONS.SET_IS_CONNECTED: // Added SET_IS_CONNECTED case
+      return {
+        ...state,
+        isConnected: action.payload,
       };
 
     default:
@@ -167,12 +174,59 @@ export const SmartSpaceProvider = ({ children }) => {
     dispatch({ type: ACTIONS.SET_ESP_CONFIG, payload: config });
   };
 
+  const setIsConnected = (status) => {
+    dispatch({ type: ACTIONS.SET_IS_CONNECTED, payload: status });
+  };
+
   const addToast = (message, type = 'info') => {
-    dispatch({ type: ACTIONS.ADD_TOAST, payload: { message, type } });
+    const exists = state.toasts.some(t => t.message === message);
+    if (!exists) {
+      dispatch({ type: ACTIONS.ADD_TOAST, payload: { message, type } });
+    }
   };
 
   const removeToast = (id) => {
     dispatch({ type: ACTIONS.REMOVE_TOAST, payload: id });
+  };
+
+  const safeFetch = async (url, options = {}) => {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error('Request failed');
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    } catch (err) {
+      addToast("Device is not connected", "error");
+      return null;
+    }
+  };
+
+  const sendCommand = async (venueId, deviceName, params) => {
+    if (!state.isConnected) {
+      addToast("Please connect first", "error");
+      return;
+    }
+
+    const { ip, port } = state.espConfig;
+    if (!ip || !port) {
+      addToast("Configuration missing", "error");
+      return;
+    }
+
+    const cleanIP = ip.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const cleanPort = port.toString().replace(/[^0-9]/g, '');
+    const queryParams = new URLSearchParams({
+      venue: venueId,
+      name: deviceName,
+      ...params,
+    });
+
+    const url = `http://${cleanIP}:${cleanPort}/device?${queryParams.toString()}`;
+    return await safeFetch(url);
   };
 
   return (
@@ -185,8 +239,11 @@ export const SmartSpaceProvider = ({ children }) => {
         deleteDevice,
         updateDeviceLocal,
         setEspConfig,
+        setIsConnected,
         addToast,
         removeToast,
+        safeFetch,
+        sendCommand,
       }}
     >
       {children}

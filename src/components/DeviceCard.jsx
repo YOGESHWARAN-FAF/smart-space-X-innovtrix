@@ -1,44 +1,31 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trash2, Power, Sun } from 'lucide-react';
 import { useSmartSpace } from '../context/SmartSpaceContext';
-import { controlDevice } from '../utils/api';
+import { useDebounce } from '../utils/useDebounce';
+import { motion } from 'framer-motion';
 
-// Simple debounce hook
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-const DeviceCard = ({ device, venueId }) => {
-  const { deleteDevice, updateDeviceLocal, espConfig, addToast } = useSmartSpace();
+const DeviceCard = ({ venueId, device }) => {
+  const { deleteDevice, updateDeviceLocal, sendCommand, addToast } = useSmartSpace();
   const [localValue, setLocalValue] = useState(device.value || 0);
-  const debouncedValue = useDebounce(localValue, 300);
+  const debouncedValue = useDebounce(localValue, 500);
 
   // Handle Slider Change (Regulatable)
   useEffect(() => {
     if (device.type === 'REGULATABLE' && debouncedValue !== device.value) {
       const sync = async () => {
         try {
-          await controlDevice(espConfig.ip, espConfig.port, venueId, device.name, { value: debouncedValue });
           updateDeviceLocal(venueId, device.id, { value: debouncedValue });
+          await sendCommand(venueId, device.name, { value: debouncedValue });
         } catch (error) {
           addToast(`Failed to set value: ${error.message}`, 'error');
         }
       };
-      
+
       if (debouncedValue !== device.value) {
-         sync();
+        sync();
       }
     }
-  }, [debouncedValue, device.type, device.name, venueId, espConfig, addToast, device.value, updateDeviceLocal]);
+  }, [debouncedValue, device.type, device.name, venueId, addToast, device.value, updateDeviceLocal, sendCommand]);
 
   // Sync local state if props change
   useEffect(() => {
@@ -53,7 +40,7 @@ const DeviceCard = ({ device, venueId }) => {
     try {
       // Optimistic update
       updateDeviceLocal(venueId, device.id, { state: newState });
-      await controlDevice(espConfig.ip, espConfig.port, venueId, device.name, { state: newState });
+      await sendCommand(venueId, device.name, { state: newState });
     } catch (error) {
       // Revert on failure
       updateDeviceLocal(venueId, device.id, { state: device.state }); // revert
@@ -88,12 +75,13 @@ const DeviceCard = ({ device, venueId }) => {
 
       <div className="device-controls">
         {device.type === 'NORMAL' ? (
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             className={`btn-toggle ${device.state === 'on' ? 'active' : ''}`}
             onClick={handleToggle}
           >
             {device.state === 'on' ? 'ON' : 'OFF'}
-          </button>
+          </motion.button>
         ) : (
           <div className="slider-container">
             <input

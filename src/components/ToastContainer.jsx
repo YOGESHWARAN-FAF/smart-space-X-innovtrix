@@ -6,7 +6,7 @@ const Toast = ({ toast, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose(toast.id);
-    }, 3000);
+    }, 1500);
     return () => clearTimeout(timer);
   }, [toast.id, onClose]);
 

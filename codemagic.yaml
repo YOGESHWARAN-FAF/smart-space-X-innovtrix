@@ -1,0 +1,22 @@
+workflows:
+  android-build:
+    name: Android build
+    environment:
+      node: "latest"
+      java: openjdk11
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm ci
+      - name: Sync Capacitor
+        script: |
+          npx cap sync android || true
+      - name: Build Android (Gradle)
+        script: |
+          cd android
+          ./gradlew assembleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients: []
